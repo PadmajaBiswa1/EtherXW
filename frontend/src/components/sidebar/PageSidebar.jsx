@@ -1,0 +1,238 @@
+import { useRef, useState } from 'react';
+import { useUIStore, useDocumentStore, useEditorStore } from '@/store';
+
+const THUMB_W  = 108;
+const THUMB_H  = 153;
+const PAGE_H   = 1123;
+const MARGIN_Y = 96;
+
+// Split ProseMirror DOM children into page buckets using actual rendered offsetTop
+function getPageBuckets(pageCount) {
+  const proseMirror = document.querySelector('.ProseMirror');
+  if (!proseMirror) return null;
+
+  const children = Array.from(proseMirror.children);
+  if (!children.length) return null;
+
+  const contentAreaH = PAGE_H - MARGIN_Y * 2;
+  const buckets = Array.from({ length: pageCount }, () => []);
+
+  children.forEach((child) => {
+    // offsetTop is relative to the ProseMirror container (which starts after top margin)
+    const page = Math.min(Math.floor(child.offsetTop / contentAreaH), pageCount - 1);
+    buckets[Math.max(0, page)].push(child.outerHTML);
+  });
+
+  return buckets;
+}
+
+export function PageSidebar() {
+  const { sidebarOpen, activePage, setActivePage } = useUIStore();
+  const { pageCount, pageOrder, reorderPages, pageThumbnails } = useDocumentStore();
+  const editor = useEditorStore((s) => s.editor);
+
+  const [dragIndex, setDragIndex] = useState(null);
+  const [dropIndex, setDropIndex] = useState(null);
+  const dragNode = useRef(null);
+  const didDrag  = useRef(false);
+
+  if (!sidebarOpen) return null;
+
+  const order = pageOrder.length === pageCount
+    ? pageOrder
+    : Array.from({ length: Math.max(1, pageCount) }, (_, i) => i);
+
+  const handleDragStart = (e, i) => {
+    dragNode.current = i;
+    didDrag.current  = false;
+    setDragIndex(i);
+    e.dataTransfer.effectAllowed = 'move';
+    const ghost = document.createElement('div');
+    ghost.style.cssText = 'position:fixed;top:-999px';
+    document.body.appendChild(ghost);
+    e.dataTransfer.setDragImage(ghost, 0, 0);
+    setTimeout(() => document.body.removeChild(ghost), 0);
+  };
+
+  const handleDragEnter = (e, i) => {
+    e.preventDefault();
+    if (i !== dragNode.current) { didDrag.current = true; setDropIndex(i); }
+  };
+
+  const handleDrop = (e, i) => {
+    e.preventDefault();
+    const from = dragNode.current;
+    if (from !== null && from !== i && editor) {
+      // 1. Get page buckets from real DOM
+      const buckets = getPageBuckets(pageCount);
+      if (buckets) {
+        // 2. Reorder buckets
+        const reordered = [...buckets];
+        const [movedBucket] = reordered.splice(from, 1);
+        reordered.splice(i, 0, movedBucket);
+
+        // 3. Flatten back to HTML and set into editor
+        const newHTML = reordered.flat().join('');
+        editor.commands.setContent(newHTML || '<p></p>', false);
+      }
+
+      // 4. Update page order in store
+      reorderPages(from, i);
+      setActivePage(i);
+
+      // 5. Scroll to the dropped page
+      setTimeout(() => {
+        const scrollArea = document.getElementById('editor-scroll-area');
+        const pageEl = document.getElementById(`document-page-${i}`);
+        if (scrollArea && pageEl) {
+          scrollArea.scrollTo({ top: pageEl.offsetTop - 40, behavior: 'smooth' });
+        }
+      }, 100);
+    }
+    setDragIndex(null); setDropIndex(null); dragNode.current = null;
+  };
+
+  const handleDragEnd = () => {
+    setDragIndex(null); setDropIndex(null); dragNode.current = null;
+  };
+
+  const handleClick = (i) => {
+    if (didDrag.current) { didDrag.current = false; return; }
+    setActivePage(i);
+    const scrollArea = document.getElementById('editor-scroll-area');
+    const pageEl = document.getElementById(`document-page-${i}`);
+    if (scrollArea && pageEl) {
+      const pageTop = pageEl.offsetTop;
+      scrollArea.scrollTo({ top: pageTop - 40, behavior: 'smooth' });
+    }
+  };
+
+  return (
+    <div style={{
+      width: 160, flexShrink: 0,
+      background: 'var(--bg-sidebar)',
+      borderRight: '1px solid var(--border)',
+      display: 'flex', flexDirection: 'column',
+      overflow: 'hidden',
+    }}>
+      <div style={{
+        padding: '10px 12px 8px', borderBottom: '1px solid var(--border)',
+        fontFamily: 'var(--font-ui)', fontSize: 10,
+        color: 'var(--text-muted)', letterSpacing: '.08em',
+        textTransform: 'uppercase', fontWeight: 600,
+        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+      }}>
+        <span>Pages</span>
+        <span style={{ color: '#d4af37' }}>{pageCount}</span>
+      </div>
+
+      <div style={{ flex: 1, overflowY: 'auto', padding: '10px 8px', display: 'flex', flexDirection: 'column' }}>
+        {order.map((pageNum, i) => {
+          const isDragging  = dragIndex === i;
+          const isDropAbove = dropIndex === i && dragIndex !== null && dragIndex > i;
+          const isDropBelow = dropIndex === i && dragIndex !== null && dragIndex < i;
+
+          return (
+            <div
+              key={pageNum}
+              draggable
+              onDragStart={(e) => handleDragStart(e, i)}
+              onDragEnter={(e) => handleDragEnter(e, i)}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => handleDrop(e, i)}
+              onDragEnd={handleDragEnd}
+              onClick={() => handleClick(i)}
+              style={{
+                padding: '8px 0',
+                cursor: isDragging ? 'grabbing' : 'grab',
+                transition: 'transform 0.15s ease, opacity 0.15s ease',
+                transform: isDragging ? 'scale(1.03)' : 'scale(1)',
+                opacity: isDragging ? 0.45 : 1,
+                position: 'relative',
+              }}
+            >
+              {/* Drop line ABOVE */}
+              <div style={{
+                position: 'absolute', top: 0, left: 8, right: 8, height: 2,
+                background: isDropAbove ? '#d4af37' : 'transparent',
+                boxShadow: isDropAbove ? '0 0 6px #d4af37' : 'none',
+                borderRadius: 2, transition: 'background 0.1s, box-shadow 0.1s', zIndex: 10,
+              }} />
+
+              <PageThumb
+                index={i}
+                active={activePage === i}
+                thumbnail={pageThumbnails[pageNum]}
+                isDragging={isDragging}
+              />
+
+              {/* Drop line BELOW */}
+              <div style={{
+                position: 'absolute', bottom: 0, left: 8, right: 8, height: 2,
+                background: isDropBelow ? '#d4af37' : 'transparent',
+                boxShadow: isDropBelow ? '0 0 6px #d4af37' : 'none',
+                borderRadius: 2, transition: 'background 0.1s, box-shadow 0.1s', zIndex: 10,
+              }} />
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{
+        padding: '8px 12px', borderTop: '1px solid var(--border)',
+        fontFamily: 'var(--font-ui)', fontSize: 10, color: 'var(--text-muted)',
+        display: 'flex', flexDirection: 'column', gap: 2,
+      }}>
+        <span>{pageCount} page{pageCount !== 1 ? 's' : ''}</span>
+        <span style={{ fontSize: 9 }}>A4 · Portrait</span>
+      </div>
+    </div>
+  );
+}
+
+function PageThumb({ index, active, thumbnail, isDragging }) {
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
+      <div style={{
+        width: THUMB_W, height: THUMB_H,
+        border: active ? '2px solid #d4af37' : '1px solid var(--border)',
+        borderRadius: 3,
+        overflow: 'hidden',
+        background: '#fff',
+        flexShrink: 0,
+        position: 'relative',
+        transition: 'border-color 0.15s, box-shadow 0.15s',
+        boxShadow: isDragging
+          ? '0 8px 24px rgba(0,0,0,0.5), 0 0 0 2px #d4af37'
+          : active ? 'var(--gold-glow)' : 'var(--shadow-sm)',
+      }}
+        onMouseEnter={(e) => { if (!active && !isDragging) e.currentTarget.style.borderColor = '#d4af37'; }}
+        onMouseLeave={(e) => { if (!active && !isDragging) e.currentTarget.style.borderColor = 'var(--border)'; }}
+      >
+        {thumbnail
+          ? <img src={thumbnail} alt={`Page ${index + 1}`}
+              style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', display: 'block' }} />
+          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa' }}>
+              <div style={{ width: 64, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {Array.from({ length: 7 }).map((_, j) => (
+                  <div key={j} style={{ height: 2, background: '#e0e0e0', borderRadius: 1, width: j % 3 === 0 ? '55%' : '100%' }} />
+                ))}
+              </div>
+            </div>
+        }
+        <div style={{
+          position: 'absolute', bottom: 4, right: 5,
+          fontSize: 8, color: '#666', fontFamily: 'var(--font-ui)',
+          background: 'rgba(255,255,255,0.85)', borderRadius: 2, padding: '1px 4px',
+        }}>{index + 1}</div>
+      </div>
+
+      <span style={{
+        fontSize: 10, fontFamily: 'var(--font-ui)',
+        color: active ? '#d4af37' : 'var(--text-muted)',
+        fontWeight: active ? 600 : 400,
+        userSelect: 'none',
+      }}>Page {index + 1}</span>
+    </div>
+  );
+}

@@ -1,0 +1,69 @@
+const BASE = '/api';
+
+class ApiError extends Error {
+  constructor(msg, status) { super(msg); this.status = status; this.name = 'ApiError'; }
+}
+
+function getToken() { return localStorage.getItem('etherx_token'); }
+
+async function req(path, opts = {}) {
+  const token = getToken();
+  const res = await fetch(`${BASE}${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...opts.headers,
+    },
+    ...opts,
+    body: opts.body ? JSON.stringify(opts.body) : undefined,
+  });
+  if (!res.ok) {
+    const text = await res.text();
+    let msg = text;
+    try { msg = JSON.parse(text).message; } catch {}
+    throw new ApiError(msg, res.status);
+  }
+  return res.json();
+}
+
+export const authApi = {
+  signup:          (data)  => req('/auth/signup',           { method: 'POST', body: data }),
+  verifyOtp:       (data)  => req('/auth/verify-otp',       { method: 'POST', body: data }),
+  resendOtp:       (data)  => req('/auth/resend-otp',       { method: 'POST', body: data }),
+  signin:          (data)  => req('/auth/signin',           { method: 'POST', body: data }),
+  forgotPassword:  (data)  => req('/auth/forgot-password',  { method: 'POST', body: data }),
+  verifyResetOtp:  (data)  => req('/auth/verify-reset-otp', { method: 'POST', body: data }),
+  resetPassword:   (data)  => req('/auth/reset-password',   { method: 'POST', body: data }),
+  me:              ()      => req('/auth/me'),
+};
+
+export const documentApi = {
+  list:           ()          => req('/documents'),
+  get:            (id)        => req(`/documents/${id}`),
+  create:         (data)      => req('/documents',       { method: 'POST',   body: data }),
+  save:           (id, data)  => req(`/documents/${id}`, { method: 'PUT',    body: data }),
+  delete:         (id)        => req(`/documents/${id}`, { method: 'DELETE' }),
+  getVersions:    (id)        => req(`/documents/${id}/versions`),
+  restoreVersion: (id, vid)   => req(`/documents/${id}/versions/${vid}/restore`, { method: 'POST' }),
+  share:          (id, opts)  => req(`/documents/${id}/share`, { method: 'POST', body: opts }),
+};
+
+export const uploadApi = {
+  image: async (file) => {
+    const fd = new FormData(); fd.append('file', file);
+    const res = await fetch(`${BASE}/upload/image`, { method: 'POST', body: fd });
+    if (!res.ok) throw new ApiError('Upload failed', res.status);
+    return res.json();
+  },
+};
+
+export const exportApi = {
+  pdf:  (id) => fetch(`${BASE}/export/${id}/pdf`).then((r) => r.blob()),
+  docx: (id) => fetch(`${BASE}/export/${id}/docx`).then((r) => r.blob()),
+  html: (id) => fetch(`${BASE}/export/${id}/html`).then((r) => r.blob()),
+};
+
+export const templateApi = {
+  list: () => req('/templates'),
+  get:  (id) => req(`/templates/${id}`),
+};
