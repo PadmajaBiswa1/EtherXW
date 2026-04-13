@@ -323,16 +323,24 @@ body {
 /* ══ Tiptap / ProseMirror ══════════════════════════════════════ */
 .ProseMirror {
   font-family: 'Crimson Pro', Georgia, serif;
-  font-size: 12pt; line-height: 1.7;
-  color: var(--text-doc); min-height: 100%;
-  outline: none; caret-color: var(--gold);
+  font-size: 12pt; 
+  line-height: 1.7;
+  color: var(--text-doc); 
+  min-height: 100%;
+  outline: none; 
+  caret-color: var(--gold);
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  max-width: 100%;
+  /* Ensure smooth zoom transitions */
+  transition: font-size 0.15s ease-out, line-height 0.15s ease-out;
 }
 .ProseMirror > * + * { margin-top: 0.6em; }
 
-.ProseMirror h1 { font-family: 'Cinzel', serif; font-size: 2em;    font-weight: 700; color: var(--text-heading); letter-spacing:.02em; }
-.ProseMirror h2 { font-family: 'Cinzel', serif; font-size: 1.55em; font-weight: 600; color: var(--text-heading); }
-.ProseMirror h3 { font-family: 'Cinzel', serif; font-size: 1.25em; font-weight: 600; color: var(--text-heading); }
-.ProseMirror h4, .ProseMirror h5, .ProseMirror h6 { font-weight: 600; }
+.ProseMirror h1 { font-family: 'Cinzel', serif; font-size: 2em;    font-weight: 700; color: var(--text-heading); letter-spacing:.02em; word-wrap: break-word; }
+.ProseMirror h2 { font-family: 'Cinzel', serif; font-size: 1.55em; font-weight: 600; color: var(--text-heading); word-wrap: break-word; }
+.ProseMirror h3 { font-family: 'Cinzel', serif; font-size: 1.25em; font-weight: 600; color: var(--text-heading); word-wrap: break-word; }
+.ProseMirror h4, .ProseMirror h5, .ProseMirror h6 { font-weight: 600; word-wrap: break-word; }
 
 .ProseMirror ul, .ProseMirror ol { padding-left: 1.6em; }
 .ProseMirror li + li { margin-top: .2em; }
@@ -355,10 +363,10 @@ body {
 
 .ProseMirror hr { border:none; border-top:1px solid var(--gold); opacity:.35; margin:1.6em 0; }
 .ProseMirror a  { color: var(--gold); text-decoration: underline; text-underline-offset: 2px; }
-.ProseMirror img { max-width:100%; height:auto; border-radius: var(--radius-sm); }
+.ProseMirror img { max-width:100%; height:auto; border-radius: var(--radius-sm); display: block; }
 
 /* Tables */
-.ProseMirror table { border-collapse:collapse; width:100%; margin:1em 0; }
+.ProseMirror table { border-collapse:collapse; width:100%; margin:1em 0; table-layout: fixed; }
 .ProseMirror th, .ProseMirror td {
   border:1px solid var(--border); padding:6px 10px; text-align:left; min-width:60px; position:relative;
 }
@@ -392,6 +400,48 @@ body {
   content: 'Page Break'; font-size:10px; color:var(--gold);
   position:absolute; top:-9px; left:50%; transform:translateX(-50%);
   background: var(--bg-page); padding:0 8px;
+}
+
+/* ══════════════════════════════════════════════════════════════
+   EtherX Word — Page Break & Block Safety (Add to bottom)
+   ══════════════════════════════════════════════════════════════ */
+
+/* ── Prevent mid-word cuts ──────────────────────────────────── */
+.ProseMirror {
+  overflow-wrap: break-word;
+  word-break:    break-word;
+  overflow-x:    hidden;
+}
+
+/* ── Prevent paragraphs & headings splitting across pages ───── */
+.ProseMirror p,
+.ProseMirror h1,
+.ProseMirror h2,
+.ProseMirror h3,
+.ProseMirror h4,
+.ProseMirror h5,
+.ProseMirror h6 {
+  break-inside:       avoid;
+  page-break-inside:  avoid;
+  overflow-wrap:      break-word;
+  word-break:         break-word;
+}
+
+/* ── Keep tables, lists, images fully intact ────────────────── */
+.ProseMirror table,
+.ProseMirror ul,
+.ProseMirror ol,
+.ProseMirror img,
+.ProseMirror blockquote,
+.ProseMirror pre {
+  break-inside:      avoid;
+  page-break-inside: avoid;
+}
+
+/* ── Prevent layout flicker on large docs ───────────────────── */
+.ProseMirror * {
+  overflow-wrap: break-word;
+  word-break:    break-word;
 }
 
 /* ══ Animations ════════════════════════════════════════════════ */

@@ -1,7 +1,7 @@
 import { useDocumentStore, useUIStore, useEditorStore } from '@/store';
 
 export function StatusBar() {
-  const { wordCount, charCount, pageCount, readingTime, trackChanges } = useDocumentStore();
+  const { wordCount = 0, charCount = 0, pageCount = 1, readingTime = 0, trackChanges = false } = useDocumentStore();
   const { zoom, setZoom } = useUIStore();
   const { spellCheck } = useEditorStore();
 
@@ -19,9 +19,9 @@ export function StatusBar() {
       <Sep />
       <Stat label="of" value={pageCount} />
       <Sep />
-      <Stat label="Words" value={wordCount.toLocaleString()} />
+      <Stat label="Words" value={(wordCount || 0).toLocaleString()} />
       <Sep />
-      <Stat label="Chars" value={charCount.toLocaleString()} />
+      <Stat label="Chars" value={(charCount || 0).toLocaleString()} />
       <Sep />
       <Stat label="Read" value={`~${readingTime} min`} />
       {trackChanges && <><Sep /><span style={{ color: 'var(--gold)', fontSize: 10 }}>● Track Changes ON</span></>}

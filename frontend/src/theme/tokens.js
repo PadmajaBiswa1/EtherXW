@@ -48,9 +48,9 @@ export function applyTheme(mode = 'dark') {
     '--shadow-page': dark ? '0 8px 40px rgba(0,0,0,.95)': '0 8px 40px rgba(0,0,0,.18)',
 
     // ── Fonts ─────────────────────────────────────────────────────
-    '--font-ui':      "'Cinzel', serif",
-    '--font-body':    "'Crimson Pro', Georgia, serif",
-    '--font-mono':    "'JetBrains Mono', monospace",
+    '--font-ui': "'Segoe UI', sans-serif",
+    '--font-body': "'Calibri', sans-serif",
+    '--font-mono': "'Consolas', monospace",
 
     // ── Radius / transitions ──────────────────────────────────────
     '--radius-sm':    '3px',

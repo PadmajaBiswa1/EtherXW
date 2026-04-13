@@ -2,15 +2,24 @@ const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
   host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: { user: process.env.SMTP_USER, pass: process.env.SMTP_PASS },
+  port: parseInt(process.env.SMTP_PORT) || 465,
+  secure: true,
+  auth: { 
+    user: process.env.SMTP_USER, 
+    pass: process.env.SMTP_PASS 
+  },
   tls: { rejectUnauthorized: false },
 });
 
 // Verify connection on startup
 transporter.verify((err) => {
-  if (err) console.error('❌ SMTP connection failed:', err.message);
+  if (err) {
+    console.error('❌ SMTP connection failed:', err.message);
+    console.error('   Make sure:');
+    console.error('   1. Gmail app-specific password is correct');
+    console.error('   2. 2FA is enabled on Gmail account');
+    console.error('   3. Less secure apps is disabled (Gmail recommends app passwords)');
+  }
   else console.log('✅ SMTP ready');
 });
 

@@ -1,25 +1,29 @@
-import { useRef, useState } from 'react';
+import { useRef, useState, useMemo } from 'react';
 import { useUIStore, useDocumentStore, useEditorStore } from '@/store';
 
 const THUMB_W  = 108;
 const THUMB_H  = 153;
 const PAGE_H   = 1123;
 const MARGIN_Y = 96;
+const CONTENT_H = PAGE_H - MARGIN_Y * 2;
 
 // Split ProseMirror DOM children into page buckets using actual rendered offsetTop
-function getPageBuckets(pageCount) {
+// Accounts for zoom level to properly detect page boundaries
+function getPageBuckets(pageCount, zoom = 100) {
   const proseMirror = document.querySelector('.ProseMirror');
   if (!proseMirror) return null;
 
   const children = Array.from(proseMirror.children);
   if (!children.length) return null;
 
-  const contentAreaH = PAGE_H - MARGIN_Y * 2;
+  // Scale content height based on current zoom level
+  const scale = zoom / 100;
+  const scaledContentHeight = CONTENT_H * scale;
   const buckets = Array.from({ length: pageCount }, () => []);
 
   children.forEach((child) => {
     // offsetTop is relative to the ProseMirror container (which starts after top margin)
-    const page = Math.min(Math.floor(child.offsetTop / contentAreaH), pageCount - 1);
+    const page = Math.min(Math.floor(child.offsetTop / scaledContentHeight), pageCount - 1);
     buckets[Math.max(0, page)].push(child.outerHTML);
   });
 
@@ -27,7 +31,7 @@ function getPageBuckets(pageCount) {
 }
 
 export function PageSidebar() {
-  const { sidebarOpen, activePage, setActivePage } = useUIStore();
+  const { sidebarOpen, activePage, setActivePage, zoom } = useUIStore();
   const { pageCount, pageOrder, reorderPages, pageThumbnails } = useDocumentStore();
   const editor = useEditorStore((s) => s.editor);
 
@@ -63,8 +67,8 @@ export function PageSidebar() {
     e.preventDefault();
     const from = dragNode.current;
     if (from !== null && from !== i && editor) {
-      // 1. Get page buckets from real DOM
-      const buckets = getPageBuckets(pageCount);
+      // 1. Get page buckets from real DOM with current zoom level
+      const buckets = getPageBuckets(pageCount, zoom);
       if (buckets) {
         // 2. Reorder buckets
         const reordered = [...buckets];
@@ -191,39 +195,51 @@ export function PageSidebar() {
 }
 
 function PageThumb({ index, active, thumbnail, isDragging }) {
+  const { theme } = useUIStore();
+  
+  // Theme-aware colors
+  const themeColors = useMemo(() => ({
+    bg: theme === 'dark' ? '#1a1a1a' : '#ffffff',
+    border: active ? '#d4af37' : (theme === 'dark' ? '#333333' : '#e0e0e0'),
+    placeholder: theme === 'dark' ? '#fafafa' : '#f0f0f0',
+    placeholderLine: theme === 'dark' ? '#333333' : '#e0e0e0',
+    pageNum: theme === 'dark' ? '#666666' : '#999999',
+    pageNumBg: theme === 'dark' ? 'rgba(0,0,0,0.5)' : 'rgba(255,255,255,0.85)',
+  }), [theme, active]);
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4 }}>
       <div style={{
         width: THUMB_W, height: THUMB_H,
-        border: active ? '2px solid #d4af37' : '1px solid var(--border)',
+        border: active ? '2px solid #d4af37' : `1px solid ${themeColors.border}`,
         borderRadius: 3,
         overflow: 'hidden',
-        background: '#fff',
+        background: themeColors.bg,
         flexShrink: 0,
         position: 'relative',
-        transition: 'border-color 0.15s, box-shadow 0.15s',
+        transition: 'border-color 0.15s, box-shadow 0.15s, background-color 0.15s',
         boxShadow: isDragging
           ? '0 8px 24px rgba(0,0,0,0.5), 0 0 0 2px #d4af37'
           : active ? 'var(--gold-glow)' : 'var(--shadow-sm)',
       }}
         onMouseEnter={(e) => { if (!active && !isDragging) e.currentTarget.style.borderColor = '#d4af37'; }}
-        onMouseLeave={(e) => { if (!active && !isDragging) e.currentTarget.style.borderColor = 'var(--border)'; }}
+        onMouseLeave={(e) => { if (!active && !isDragging) e.currentTarget.style.borderColor = themeColors.border; }}
       >
         {thumbnail
           ? <img src={thumbnail} alt={`Page ${index + 1}`}
               style={{ width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'top', display: 'block' }} />
-          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#fafafa' }}>
+          : <div style={{ width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', background: themeColors.placeholder }}>
               <div style={{ width: 64, display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {Array.from({ length: 7 }).map((_, j) => (
-                  <div key={j} style={{ height: 2, background: '#e0e0e0', borderRadius: 1, width: j % 3 === 0 ? '55%' : '100%' }} />
+                  <div key={j} style={{ height: 2, background: themeColors.placeholderLine, borderRadius: 1, width: j % 3 === 0 ? '55%' : '100%' }} />
                 ))}
               </div>
             </div>
         }
         <div style={{
           position: 'absolute', bottom: 4, right: 5,
-          fontSize: 8, color: '#666', fontFamily: 'var(--font-ui)',
-          background: 'rgba(255,255,255,0.85)', borderRadius: 2, padding: '1px 4px',
+          fontSize: 8, color: themeColors.pageNum, fontFamily: 'var(--font-ui)',
+          background: themeColors.pageNumBg, borderRadius: 2, padding: '1px 4px',
         }}>{index + 1}</div>
       </div>
 

@@ -1,155 +1,129 @@
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { EditorContent } from '@tiptap/react';
 import { useEditorSetup } from '@/hooks/useEditorSetup';
+import { useThumbnailGenerator } from '@/hooks/useThumbnailGenerator';
 import { useUIStore, useDocumentStore } from '@/store';
-import html2canvas from 'html2canvas';
+
+const PAGE_HEIGHT  = 1123; // A4 height in pixels (at 96 DPI)
+const PAGE_WIDTH   = 794;  // A4 width in pixels (at 96 DPI)
+const PAGE_PADDING = 96;   // Top and bottom padding (48px each side = 96px total)
+const CONTENT_HEIGHT = PAGE_HEIGHT - PAGE_PADDING * 2;
 
 export function EditorCanvas() {
-  const editor     = useEditorSetup();
-  const zoom       = useUIStore((s) => s.zoom);
-  const setActivePage = useUIStore((s) => s.setActivePage);
-  const contentRef = useRef(null);
-  const wrapperRef = useRef(null);
+  const editor    = useEditorSetup();
+  const { zoom }  = useUIStore();
+  const { setStats, pageOrder, pageCount: storePageCount } = useDocumentStore();
+  const scale     = zoom / 100;
+  const wrapRef   = useRef();
+  const scrollRef = useRef();
   const [pageCount, setPageCount] = useState(1);
-  const setStats     = useDocumentStore((s) => s.setStats);
-  const setThumbnail = useDocumentStore((s) => s.setThumbnail);
+  const overflowTimer = useRef(null);
 
-  const PAGE_W  = 794;
-  const PAGE_H  = 1123;
-  const MARGIN_Y = 96;
-  const MARGIN_X = 96;
-  const scale   = zoom / 100;
+  // Generate and update thumbnails
+  useThumbnailGenerator();
+  
+  // Calculate scaled dimensions for responsive sizing
+  const scaledDimensions = useMemo(() => ({
+    pageHeight: PAGE_HEIGHT * scale,
+    pageWidth: PAGE_WIDTH * scale,
+    padding: PAGE_PADDING * scale,
+    contentHeight: CONTENT_HEIGHT * scale,
+    scrollPaddingY: 40 * scale,
+    scrollPaddingX: 20 * scale,
+  }), [scale]);
 
-  // Capture each page as a snapshot of the real rendered DOM
-  const captureThumbnails = useCallback(async (count) => {
-    const wrapper = wrapperRef.current;
-    if (!wrapper) return;
-    for (let i = 0; i < count; i++) {
-      try {
-        const canvas = await html2canvas(wrapper, {
-          scale: 0.136,           // THUMB_W(108) / PAGE_W(794) ≈ 0.136
-          useCORS: true,
-          logging: false,
-          scrollX: 0,
-          scrollY: -(i * PAGE_H * scale), // shift to capture this page's slice
-          x: 0,
-          y: i * PAGE_H * scale,
-          width: PAGE_W * scale,
-          height: PAGE_H * scale,
-          windowWidth: PAGE_W * scale,
-          windowHeight: PAGE_H * scale,
-        });
-        setThumbnail(i, canvas.toDataURL('image/jpeg', 0.8));
-      } catch {}
-    }
-  }, [setThumbnail, scale, PAGE_H, PAGE_W]);
+  // Debounced page count — reads height only, never touches Tiptap DOM
+  const recalcPages = useCallback(() => {
+  clearTimeout(overflowTimer.current);
+  overflowTimer.current = setTimeout(() => {
+    const el = wrapRef.current?.querySelector('.ProseMirror');
+    if (!el) return;
+    const pages = Math.max(1, Math.ceil(el.scrollHeight / scaledDimensions.contentHeight));
+    const text  = el.innerText || '';
+    const words = text.trim().split(/\s+/).filter(Boolean).length;
+    setPageCount(pages);
+    setStats({ wordCount: words, charCount: text.length, pageCount: pages });
+  }, 120);
+}, [setStats, scaledDimensions]);
 
   useEffect(() => {
     if (!editor) return;
-    let debounce;
+    editor.on('update', recalcPages);
+    return () => editor.off('update', recalcPages);
+  }, [editor, recalcPages]);
 
-    const update = () => {
-      const el = contentRef.current?.querySelector('.ProseMirror');
-      if (!el) return;
-
-      const contentAreaH = PAGE_H - MARGIN_Y * 2;
-      const count = Math.max(1, Math.ceil(el.scrollHeight / contentAreaH));
-      setPageCount(count);
-
-      const text  = editor.state.doc.textContent;
-      const words = text.trim().split(/\s+/).filter(Boolean);
-      setStats({
-        wordCount: words.length,
-        charCount: editor.storage.characterCount?.characters?.() ?? text.length,
-        pageCount: count,
-      });
-
-      clearTimeout(debounce);
-      debounce = setTimeout(() => captureThumbnails(count), 600);
-    };
-
-    update();
-    editor.on('update', update);
-    return () => { editor.off('update', update); clearTimeout(debounce); };
-  }, [editor, captureThumbnails, setStats, MARGIN_Y, PAGE_H]);
-
-  // Sync activePage with scroll position
+  // Cleanup timer on unmount
   useEffect(() => {
-    const scrollEl = document.getElementById('editor-scroll-area');
-    if (!scrollEl) return;
-    const onScroll = () => {
-      const scrollTop = scrollEl.scrollTop;
-      const page = Math.floor(scrollTop / (PAGE_H * (zoom / 100)));
-      setActivePage(Math.max(0, page));
-    };
-    scrollEl.addEventListener('scroll', onScroll, { passive: true });
-    return () => scrollEl.removeEventListener('scroll', onScroll);
-  }, [zoom, setActivePage]);
-
-  const totalH = pageCount * PAGE_H * scale;
+    return () => clearTimeout(overflowTimer.current);
+  }, []);
 
   return (
     <div
+      ref={scrollRef}
       id="editor-scroll-area"
       style={{
-        flex: 1, overflowY: 'auto', overflowX: 'auto',
+        flex: 1,
+        overflowY: 'auto',
+        overflowX: 'auto',
         background: 'var(--bg-app)',
-        display: 'flex', flexDirection: 'column',
+        display: 'flex',
+        flexDirection: 'column',
         alignItems: 'center',
-        padding: `${40 * scale}px ${20 * scale}px`,
-      }}>
+        padding: `${scaledDimensions.scrollPaddingY}px ${scaledDimensions.scrollPaddingX}px`,
+        scrollBehavior: 'smooth',
+      }}
+    >
+      {/* A4 page container */}
+      <div
+        ref={wrapRef}
+        id="document-page-0"
+        style={{
+          width:     scaledDimensions.pageWidth,
+          minHeight: scaledDimensions.pageHeight * pageCount,
+          background: 'var(--bg-page)',
+          boxShadow: 'var(--shadow-page)',
+          borderRadius: 2,
+          padding: `${scaledDimensions.padding}px`,
+          position: 'relative',
+          wordBreak: 'break-word',
+          overflowWrap: 'break-word',
+          overflowX: 'hidden',
+          transition: 'all 0.15s ease-out',
 
-      <div ref={wrapperRef} data-editor-wrapper
-        style={{ position: 'relative', width: PAGE_W * scale, height: totalH }}>
+          // Gold dashed page break lines drawn via CSS background
+          backgroundImage: `repeating-linear-gradient(
+            to bottom,
+            transparent,
+            transparent ${scaledDimensions.pageHeight - 1}px,
+            rgba(212,175,55,0.2) ${scaledDimensions.pageHeight - 1}px,
+            rgba(212,175,55,0.2) ${scaledDimensions.pageHeight}px
+          )`,
+          backgroundSize: `100% ${scaledDimensions.pageHeight}px`,
+        }}
+      >
+        <EditorContent editor={editor} />
 
-        {/* Page background sheets */}
+        {/* Page number labels */}
         {Array.from({ length: pageCount }).map((_, i) => (
-          <div key={i} id={`document-page-${i}`} style={{
-            position: 'absolute',
-            top: i * PAGE_H * scale, left: 0,
-            width: PAGE_W * scale, height: PAGE_H * scale,
-            background: 'var(--bg-page)',
-            boxShadow: 'var(--shadow-page)',
-            borderRadius: 2, pointerEvents: 'none',
-            overflow: 'hidden',
-          }}>
-            <div style={{
-              position: 'absolute', top: 0, left: 0, right: 0, height: 2,
-              background: 'linear-gradient(90deg, transparent, var(--gold-border), transparent)',
-              opacity: 0.4,
-            }} />
-            <div style={{
-              position: 'absolute', bottom: 24 * scale, left: 0, right: 0,
-              textAlign: 'center', fontSize: 10 * scale,
-              color: 'var(--text-muted)', fontFamily: 'var(--font-ui)',
-            }}>{i + 1}</div>
+          <div
+            key={i}
+            style={{
+              position:      'absolute',
+              top:           (i + 1) * scaledDimensions.pageHeight - (28 * scale),
+              left:          0,
+              right:         0,
+              textAlign:     'center',
+              fontSize:      10 * scale,
+              color:         'var(--text-muted)',
+              fontFamily:    'var(--font-ui)',
+              pointerEvents: 'none',
+              userSelect:    'none',
+            }}
+          >
+            {i + 1}
           </div>
         ))}
-
-        {/* Page-break gap dividers */}
-        {Array.from({ length: pageCount - 1 }).map((_, i) => (
-          <div key={`break-${i}`} style={{
-            position: 'absolute',
-            top: (i + 1) * PAGE_H * scale - 8 * scale,
-            left: -20 * scale, right: -20 * scale,
-            height: 16 * scale,
-            background: 'var(--bg-app)',
-            zIndex: 3, pointerEvents: 'none',
-          }} />
-        ))}
-
-        {/* Single continuous editor — all pages are editable */}
-        <div ref={contentRef} style={{
-          position: 'absolute', top: 0, left: 0, right: 0,
-          zIndex: 1,
-          padding: `${MARGIN_Y * scale}px ${MARGIN_X * scale}px`,
-          minHeight: totalH,
-        }}>
-          <EditorContent editor={editor} />
-        </div>
       </div>
-
-      <div style={{ height: 40 * scale }} />
     </div>
   );
 }

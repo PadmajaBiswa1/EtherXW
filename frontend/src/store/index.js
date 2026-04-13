@@ -15,7 +15,7 @@ export const useDocumentStore = create((set) => ({
     setContent:  (content) => set({ content, isDirty: true, updatedAt: new Date() }),
     setSaving:   (v)       => set({ isSaving: v }),
     setLastSaved:()        => set({ lastSaved: new Date(), isDirty: false }),
-    setStats: ({ wordCount, charCount, pageCount }) =>
+    setStats: ({ wordCount = 0, charCount = 0, pageCount = 1 }) =>
       set((s) => {
         if (s.pageCount === pageCount) {
           return { wordCount, charCount, pageCount, readingTime: Math.ceil(wordCount / 200) };
