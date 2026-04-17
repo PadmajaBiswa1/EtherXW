@@ -1,19 +1,44 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useUIStore } from '@/store';
-import { HomeTab }   from './tabs/HomeTab';
-import { InsertTab } from './tabs/InsertTab';
-import { LayoutTab } from './tabs/LayoutTab';
-import { ReviewTab } from './tabs/ReviewTab';
-import { ViewTab }   from './tabs/ViewTab';
+import { FileMenuOverlay } from '@/components/FileMenuOverlay';
+import { HomeTab }        from './tabs/HomeTab';
+import { InsertTab }      from './tabs/InsertTab';
+import { LayoutTab }      from './tabs/LayoutTab';
+import { ReviewTab }      from './tabs/ReviewTab';
+import { ViewTab }        from './tabs/ViewTab';
+import { DrawTab }        from './tabs/DrawTab';
+import { DesignTab }      from './tabs/DesignTab';
+import { ReferencesTab }  from './tabs/ReferencesTab';
+import { MailingsTab }    from './tabs/MailingsTab';
+import { HelpTab }        from './tabs/HelpTab';
 
 const TABS = [
-  { id: 'home',   label: 'Home' },
-  { id: 'insert', label: 'Insert' },
-  { id: 'layout', label: 'Layout' },
-  { id: 'review', label: 'Review' },
-  { id: 'view',   label: 'View' },
+  { id: 'file',       label: 'File' },
+  { id: 'home',       label: 'Home' },
+  { id: 'insert',     label: 'Insert' },
+  { id: 'draw',       label: 'Draw' },
+  { id: 'design',     label: 'Design' },
+  { id: 'layout',     label: 'Layout' },
+  { id: 'references', label: 'References' },
+  { id: 'mailings',   label: 'Mailings' },
+  { id: 'review',     label: 'Review' },
+  { id: 'view',       label: 'View' },
+  { id: 'help',       label: 'Help' },
 ];
 
-const TAB_CONTENT = { home: HomeTab, insert: InsertTab, layout: LayoutTab, review: ReviewTab, view: ViewTab };
+const TAB_CONTENT = {
+  home: HomeTab,
+  insert: InsertTab,
+  layout: LayoutTab,
+  review: ReviewTab,
+  view: ViewTab,
+  draw: DrawTab,
+  design: DesignTab,
+  references: ReferencesTab,
+  mailings: MailingsTab,
+  help: HelpTab,
+};
 
 const ribbonStyles = `
   @keyframes ribbonHover {
@@ -23,7 +48,31 @@ const ribbonStyles = `
 `;
 
 export function Ribbon() {
+  const navigate = useNavigate();
   const { activeTab, setActiveTab, ribbonCollapsed, toggleRibbon, theme } = useUIStore();
+  const [fileOverlayOpen, setFileOverlayOpen] = useState(false);
+  
+  const handleFileClick = () => {
+    setFileOverlayOpen(true);
+  };
+
+  const handleCloseFileOverlay = () => {
+    setFileOverlayOpen(false);
+  };
+
+  const handleTabClick = (tabId) => {
+    if (tabId === 'file') {
+      handleFileClick();
+      return;
+    }
+    if (activeTab === tabId) {
+      toggleRibbon();
+    } else {
+      setActiveTab(tabId);
+      if (ribbonCollapsed) toggleRibbon();
+    }
+  };
+
   const Content = TAB_CONTENT[activeTab] || HomeTab;
 
   return (
@@ -49,24 +98,19 @@ export function Ribbon() {
       }}>
         {TABS.map((t) => {
           const active = t.id === activeTab;
+          const isFile = t.id === 'file';
           return (
             <button key={t.id}
-              onClick={() => {
-                if (active) toggleRibbon();
-                else {
-                  setActiveTab(t.id);
-                  if (ribbonCollapsed) toggleRibbon();
-                }
-              }}
+              onClick={() => handleTabClick(t.id)}
               title={`Switch to ${t.label} tab`}
               style={{
-                background: active ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
+                background: (active && !isFile) ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
                 border: 'none',
-                borderBottom: active ? '2px solid var(--gold)' : '1px solid transparent',
-                color: active ? 'var(--gold)' : 'var(--text-secondary)',
-                fontFamily: 'var(--font-ui)',
-                fontSize: 13,
-                fontWeight: active ? 700 : 500,
+                borderBottom: (active && !isFile) ? '2px solid var(--gold)' : '1px solid transparent',
+                color: (active && !isFile) ? 'var(--gold)' : isFile ? 'var(--gold)' : 'var(--text-secondary)',
+                fontFamily: isFile ? 'var(--font-ui)' : 'var(--font-ui)',
+                fontSize: isFile ? 14 : 13,
+                fontWeight: (active && !isFile) ? 700 : isFile ? 600 : 500,
                 letterSpacing: '0.05em',
                 textTransform: 'uppercase',
                 padding: '6px 16px',
@@ -77,15 +121,15 @@ export function Ribbon() {
                 userSelect: 'none',
               }}
               onMouseEnter={(e) => {
-                if (!active) {
+                if (!active || isFile) {
                   e.currentTarget.style.color = 'var(--gold)';
                   e.currentTarget.style.background = 'rgba(212, 175, 55, 0.06)';
                 }
               }}
               onMouseLeave={(e) => {
-                if (!active) {
-                  e.currentTarget.style.color = 'var(--text-secondary)';
-                  e.currentTarget.style.background = 'transparent';
+                if (!active || isFile) {
+                  e.currentTarget.style.background = active && !isFile ? 'rgba(212, 175, 55, 0.1)' : 'transparent';
+                  e.currentTarget.style.color = isFile ? 'var(--gold)' : 'var(--text-secondary)';
                 }
               }}
             >
@@ -128,7 +172,7 @@ export function Ribbon() {
       </div>
 
       {/* Ribbon Content Area */}
-      {!ribbonCollapsed && (
+      {!ribbonCollapsed && activeTab !== 'file' && (
         <div style={{
           display: 'flex',
           alignItems: 'flex-start',
@@ -138,17 +182,20 @@ export function Ribbon() {
           paddingBottom: 4,
           paddingLeft: 8,
           paddingRight: 8,
-          overflowX: 'hidden',
-          overflowY: 'visible',
+          overflow: 'visible',
           gap: 2,
           background: 'linear-gradient(180deg, rgba(212, 175, 55, 0.02) 0%, var(--bg-surface) 100%)',
           borderTop: '1px solid rgba(212, 175, 55, 0.05)',
+          position: 'relative',
         }}
-          className="ribbon-content-scroll"
+          className="ribbon-content"
         >
           <Content />
         </div>
       )}
+
+      {/* File Menu Overlay */}
+      {fileOverlayOpen && <FileMenuOverlay onClose={handleCloseFileOverlay} />}
     </div>
   );
 }

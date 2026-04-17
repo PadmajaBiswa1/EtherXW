@@ -60,3 +60,9 @@ export async function exportToDocx(title, html) {
   const buffer = await Packer.toBlob(doc);
   saveAs(buffer, `${sanitize(title)}.docx`);
 }
+
+/* ── Plain Text ──────────────────────────────────────────────── */
+export function exportToText(title, text) {
+  const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
+  saveAs(blob, `${sanitize(title)}.txt`);
+}

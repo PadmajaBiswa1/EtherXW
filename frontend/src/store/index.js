@@ -53,12 +53,16 @@ export const useUIStore = create((set) => ({
   zoom: 100,
   activeTab: 'home',
   activePage: 0,
+  fileMenuOpen: false,
+  fileMenuSection: 'home',
   toggleSidebar:    () => set((s) => ({ sidebarOpen: !s.sidebarOpen })),
   toggleFullscreen: () => set((s) => ({ fullscreen: !s.fullscreen })),
   toggleRibbon:     () => set((s) => ({ ribbonCollapsed: !s.ribbonCollapsed })),
   setZoom:          (z) => set({ zoom: Math.min(200, Math.max(25, z)) }),
   setActiveTab:     (t) => set({ activeTab: t }),
   setActivePage:    (p) => set({ activePage: p }),
+  setFileMenuOpen:  (v) => set({ fileMenuOpen: v }),
+  setFileMenuSection: (s) => set({ fileMenuSection: s }),
 
   dialogs: {
     insertImage: false, insertTable: false, insertLink: false,
