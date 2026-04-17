@@ -2,6 +2,7 @@
 //  EtherX Word — UI Primitives
 // ═══════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react';
+import { useUIStore } from '@/store';
 
 /* ── Button ─────────────────────────────────────────────────── */
 const variantStyle = {
@@ -58,23 +59,147 @@ export function Divider({ vertical = false }) {
 /* ── Tooltip ────────────────────────────────────────────────── */
 export function Tooltip({ children, text, shortcut, placement = 'top' }) {
   const [show, setShow] = useState(false);
+  const [position, setPosition] = useState({ top: 0, left: 0 });
+  const [arrowDirection, setArrowDirection] = useState('down');
+  const { theme: themeMode } = useUIStore();
+  const triggerRef = useRef(null);
+  const hoverTimeoutRef = useRef(null);
   const isTop = placement === 'top';
+  const [isVisible, setIsVisible] = useState(false);
+
+  // Use Zustand store theme
+  const isDarkMode = themeMode === 'dark';
+  const tooltipStyle = {
+    dark: {
+      background: '#0a0800',
+      color: '#ece8dc',
+      border: '1px solid rgba(212, 175, 55, 0.4)',
+      arrow: 'rgba(212, 175, 55, 0.4)',
+    },
+    light: {
+      background: '#fffef8',
+      color: '#1a1a1a',
+      border: '1px solid rgba(212, 175, 55, 0.3)',
+      arrow: 'rgba(212, 175, 55, 0.3)',
+    },
+  };
+  const theme = isDarkMode ? tooltipStyle.dark : tooltipStyle.light;
+
+  const updatePosition = () => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const tooltipGap = 18; // Increased gap with arrow size (6px arrow + 12px spacing)
+    const tooltipHeight = 32; // More accurate height with padding
+    const minTopThreshold = 40; // Minimum space needed at top
+    
+    // Calculate preferred position (above button)
+    let top = isTop ? rect.top - tooltipGap : rect.bottom + tooltipGap;
+    let direction = 'down';
+    
+    // Smart repositioning: if tooltip would go off-screen at top, move below
+    if (isTop && top < minTopThreshold) {
+      top = rect.bottom + tooltipGap;
+      direction = 'up';
+    }
+    
+    setArrowDirection(direction);
+    setPosition({
+      top,
+      left: rect.left + rect.width / 2,
+    });
+  };
+
+  const handleMouseEnter = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    updatePosition();
+    setShow(true);
+    // 120ms hover delay for responsive feel
+    hoverTimeoutRef.current = setTimeout(() => setIsVisible(true), 120);
+  };
+
+  const handleMouseLeave = () => {
+    if (hoverTimeoutRef.current) clearTimeout(hoverTimeoutRef.current);
+    setIsVisible(false);
+    setTimeout(() => setShow(false), 140);
+  };
+
   return (
-    <div style={{ position: 'relative', display: 'inline-flex' }}
-      onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+    <div
+      ref={triggerRef}
+      style={{ position: 'relative', display: 'inline-flex' }}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+    >
       {children}
       {show && text && (
-        <div className="anim-fade-in" style={{
-          position: 'absolute', zIndex: 9999, whiteSpace: 'nowrap', pointerEvents: 'none',
-          background: '#0a0800', color: '#ece8dc',
-          border: '1px solid var(--border-gold)',
-          fontSize: '11px', padding: '4px 9px', borderRadius: 'var(--radius-sm)',
-          boxShadow: 'var(--shadow-md)',
-          ...(isTop ? { bottom: 'calc(100% + 7px)', left: '50%', transform: 'translateX(-50%)' }
-                     : { top: 'calc(100% + 7px)',   left: '50%', transform: 'translateX(-50%)' }),
-        }}>
-          {text}
-          {shortcut && <span style={{ color: 'var(--gold)', marginLeft: 6, fontSize: '10px' }}>{shortcut}</span>}
+        <div
+          style={{
+            position: 'fixed',
+            zIndex: 50000,
+            top: `${position.top}px`,
+            left: `${position.left}px`,
+            pointerEvents: 'none',
+            opacity: isVisible ? 1 : 0,
+            transform: isVisible 
+              ? 'translate(-50%, -4px)' 
+              : 'translate(-50%, 4px)',
+            transition: 'all 140ms cubic-bezier(0.23, 1, 0.320, 1)',
+          }}
+        >
+          {/* Arrow indicator - flips direction based on position */}
+          <div
+            style={{
+              position: 'absolute',
+              ...(arrowDirection === 'down' 
+                ? { bottom: '-6px' }
+                : { top: '-6px' }),
+              left: '50%',
+              transform: 'translateX(-50%)',
+              width: 0,
+              height: 0,
+              borderLeft: '5px solid transparent',
+              borderRight: '5px solid transparent',
+              ...(arrowDirection === 'down'
+                ? { borderTop: `6px solid ${theme.background}` }
+                : { borderBottom: `6px solid ${theme.background}` }),
+              zIndex: 1,
+            }}
+          />
+
+          {/* Tooltip content */}
+          <div
+            style={{
+              background: theme.background,
+              color: theme.color,
+              border: theme.border,
+              fontSize: '11px',
+              fontWeight: 500,
+              letterSpacing: '0.02em',
+              padding: '6px 12px',
+              borderRadius: '4px',
+              boxShadow: isDarkMode
+                ? '0 4px 16px rgba(0, 0, 0, 0.6), 0 0 1px rgba(212, 175, 55, 0.2)'
+                : '0 4px 16px rgba(0, 0, 0, 0.12), 0 0 1px rgba(212, 175, 55, 0.3)',
+              whiteSpace: 'nowrap',
+              lineHeight: '1.4',
+            }}
+          >
+            {text}
+            {shortcut && (
+              <span
+                style={{
+                  color: 'var(--gold)',
+                  marginLeft: 8,
+                  fontSize: '10px',
+                  fontWeight: 600,
+                  letterSpacing: '0.03em',
+                  opacity: 0.9,
+                }}
+              >
+                {shortcut}
+              </span>
+            )}
+          </div>
         </div>
       )}
     </div>
