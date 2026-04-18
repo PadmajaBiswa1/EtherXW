@@ -1,6 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useUIStore } from '@/store';
+import { useUIStore, useEditorStore } from '@/store';
 import { FileMenuOverlay } from '@/components/FileMenuOverlay';
 import { HomeTab }        from './tabs/HomeTab';
 import { InsertTab }      from './tabs/InsertTab';
@@ -12,6 +12,8 @@ import { DesignTab }      from './tabs/DesignTab';
 import { ReferencesTab }  from './tabs/ReferencesTab';
 import { MailingsTab }    from './tabs/MailingsTab';
 import { HelpTab }        from './tabs/HelpTab';
+import { TableDesignTab } from './tabs/TableDesignTab';
+import { TableLayoutTab } from './tabs/TableLayoutTab';
 
 const TABS = [
   { id: 'file',       label: 'File' },
@@ -38,6 +40,8 @@ const TAB_CONTENT = {
   references: ReferencesTab,
   mailings: MailingsTab,
   help: HelpTab,
+  'table-design': TableDesignTab,
+  'table-layout': TableLayoutTab,
 };
 
 const ribbonStyles = `
@@ -50,8 +54,62 @@ const ribbonStyles = `
 export function Ribbon() {
   const navigate = useNavigate();
   const { activeTab, setActiveTab, ribbonCollapsed, toggleRibbon, theme } = useUIStore();
+  const { editor } = useEditorStore();
   const [fileOverlayOpen, setFileOverlayOpen] = useState(false);
+  const [isInTable, setIsInTable] = useState(false);
+
+  // Monitor editor state for table context
+  useEffect(() => {
+    if (!editor) return;
+
+    const updateTableState = () => {
+      setIsInTable(editor.isActive('table'));
+    };
+
+    // Update on editor selection change
+    editor.on('selectionUpdate', updateTableState);
+    editor.on('update', updateTableState);
+
+    // Initial check
+    updateTableState();
+
+    return () => {
+      try {
+        editor.off('selectionUpdate', updateTableState);
+        editor.off('update', updateTableState);
+      } catch (e) {
+        // Editor may have been destroyed
+      }
+    };
+  }, [editor]);
+
+  // Base tabs (always visible)
+  const TABS = [
+    { id: 'file',       label: 'File' },
+    { id: 'home',       label: 'Home' },
+    { id: 'insert',     label: 'Insert' },
+    { id: 'draw',       label: 'Draw' },
+    { id: 'design',     label: 'Design' },
+    { id: 'layout',     label: 'Layout' },
+    { id: 'references', label: 'References' },
+    { id: 'mailings',   label: 'Mailings' },
+    { id: 'review',     label: 'Review' },
+    { id: 'view',       label: 'View' },
+    { id: 'help',       label: 'Help' },
+  ];
+
+  // Contextual table tabs (shown when cursor in table)
+  const TABLE_TABS = [
+    { id: 'table-design', label: 'Table Design' },
+    { id: 'table-layout', label: 'Table Layout' },
+  ];
+
+  // All tabs including contextual ones
+  const allTabs = isInTable ? [...TABS, ...TABLE_TABS] : TABS;
   
+  // Validate active tab is still in visible tabs
+  const validActiveTab = allTabs.some(t => t.id === activeTab) ? activeTab : 'home';
+
   const handleFileClick = () => {
     setFileOverlayOpen(true);
   };
@@ -65,7 +123,7 @@ export function Ribbon() {
       handleFileClick();
       return;
     }
-    if (activeTab === tabId) {
+    if (validActiveTab === tabId) {
       toggleRibbon();
     } else {
       setActiveTab(tabId);
@@ -73,7 +131,7 @@ export function Ribbon() {
     }
   };
 
-  const Content = TAB_CONTENT[activeTab] || HomeTab;
+  const Content = TAB_CONTENT[validActiveTab] || HomeTab;
 
   return (
     <div style={{
@@ -96,9 +154,10 @@ export function Ribbon() {
         borderBottom: '1px solid var(--border)',
         background: 'linear-gradient(180deg, var(--bg-surface) 0%, rgba(212, 175, 55, 0.02) 100%)',
       }}>
-        {TABS.map((t) => {
-          const active = t.id === activeTab;
+        {allTabs.map((t) => {
+          const active = t.id === validActiveTab;
           const isFile = t.id === 'file';
+          const isTableTab = t.id.startsWith('table-');
           return (
             <button key={t.id}
               onClick={() => handleTabClick(t.id)}
@@ -107,10 +166,10 @@ export function Ribbon() {
                 background: (active && !isFile) ? 'rgba(212, 175, 55, 0.1)' : 'transparent',
                 border: 'none',
                 borderBottom: (active && !isFile) ? '2px solid var(--gold)' : '1px solid transparent',
-                color: (active && !isFile) ? 'var(--gold)' : isFile ? 'var(--gold)' : 'var(--text-secondary)',
-                fontFamily: isFile ? 'var(--font-ui)' : 'var(--font-ui)',
-                fontSize: isFile ? 14 : 13,
-                fontWeight: (active && !isFile) ? 700 : isFile ? 600 : 500,
+                color: (active && !isFile) ? 'var(--gold)' : isFile ? 'var(--gold)' : isTableTab ? 'var(--text-muted)' : 'var(--text-secondary)',
+                fontFamily: 'var(--font-ui)',
+                fontSize: isFile ? 14 : isTableTab ? 12 : 13,
+                fontWeight: (active && !isFile) ? 700 : isFile ? 600 : isTableTab ? 500 : 500,
                 letterSpacing: '0.05em',
                 textTransform: 'uppercase',
                 padding: '6px 16px',
@@ -119,6 +178,8 @@ export function Ribbon() {
                 transition: 'all 0.2s ease',
                 outline: 'none',
                 userSelect: 'none',
+                borderLeft: isTableTab ? '1px solid rgba(212, 175, 55, 0.2)' : 'none',
+                paddingLeft: isTableTab ? '12px' : '16px',
               }}
               onMouseEnter={(e) => {
                 if (!active || isFile) {
@@ -129,7 +190,7 @@ export function Ribbon() {
               onMouseLeave={(e) => {
                 if (!active || isFile) {
                   e.currentTarget.style.background = active && !isFile ? 'rgba(212, 175, 55, 0.1)' : 'transparent';
-                  e.currentTarget.style.color = isFile ? 'var(--gold)' : 'var(--text-secondary)';
+                  e.currentTarget.style.color = isFile ? 'var(--gold)' : isTableTab ? 'var(--text-muted)' : 'var(--text-secondary)';
                 }
               }}
             >
@@ -172,7 +233,7 @@ export function Ribbon() {
       </div>
 
       {/* Ribbon Content Area */}
-      {!ribbonCollapsed && activeTab !== 'file' && (
+      {!ribbonCollapsed && validActiveTab !== 'file' && (
         <div style={{
           display: 'flex',
           alignItems: 'flex-start',
